@@ -22,7 +22,7 @@ def get_day_results(records):
         return 0, 0, 0
 
     for r in records:
-        # 1. 累加所有用药剂量 (包含缓释和追加)
+        # 1. 累加所有用药剂量
         try:
             total_today += float(r.get('dose', 0) or 0)
         except: pass
@@ -80,20 +80,23 @@ with st.sidebar:
     st.divider()
     st.markdown("""
     <div style="font-size: 12px; color: #666; background-color: #f8f9fa; padding: 10px; border-radius: 5px;">
-    <b>📋 核心逻辑</b><br>
-    - <b>次日基数：</b>今日所有用药总量 / 2<br>
-    - <b>自动填充：</b>建议量会自动填入次日 08:00 和 20:00<br>
-    - <b>无痛减量：</b>12h内评分均 < 1，该段药量减半
+    <b>📋 爆发痛加药规则</b><br>
+    1. <b>评分 ≥ 4：</b>建议当小时增加 <b>10mg</b> 速效药。<br>
+    2. <b>评分 ≥ 8：</b>建议当小时增加 <b>20mg</b> 速效药。<br><br>
+    <b>📋 调整与减量逻辑</b><br>
+    - <b>次日建议：</b>今日所有用药总和 / 2。<br>
+    - <b>无痛减量：</b>12h内评分均 < 1（含0、睡觉、未填），对应半天药量减半。<br>
+    - <b>数值修正：</b>最小 10mg，四舍五入。
     </div>
     """, unsafe_allow_html=True)
-    if st.button("🚨 强制重置"):
+    if st.button("🚨 强制重置数据"):
         st.session_state.all_days_data = {}
         st.rerun()
 
 # --- 计算建议 ---
 total_p, am_suggest, pm_suggest = get_day_results(st.session_state.all_days_data[d_str_p]["records"])
 
-# 自动填充今日早晚基数（如果还没填）
+# 自动填充逻辑
 if st.session_state.all_days_data[d_str_c]["records"][0]["dose"] == 0 and am_suggest > 0:
     st.session_state.all_days_data[d_str_c]["records"][0]["dose"] = am_suggest
     st.session_state.all_days_data[d_str_c]["records"][0]["type"] = "吗啡(缓释)"
@@ -125,6 +128,14 @@ for i, hr in enumerate(hours_labels):
                    index=score_options.index(s_val) if s_val in score_options else 0,
                    key=f"in_{d_str_c}_{i}_score", on_change=sync_val, args=(d_str_c, i, "score"),
                    label_visibility="collapsed")
+    
+    # --- 评分实时规则提示 (新增) ---
+    if s_val.isdigit():
+        v = int(s_val)
+        if v >= 8:
+            r_c[1].markdown("<span style='color:red;font-size:10px;'>⚠ 建议加20mg</span>", unsafe_allow_html=True)
+        elif v >= 4:
+            r_c[1].markdown("<span style='color:orange;font-size:10px;'>⚠ 建议加10mg</span>", unsafe_allow_html=True)
     
     # 用药种类
     t_val = current_records[i]["type"]
